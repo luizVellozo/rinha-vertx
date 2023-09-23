@@ -10,15 +10,11 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
-import io.vertx.redis.client.Redis;
-import io.vertx.redis.client.RedisAPI;
-import io.vertx.redis.client.RedisOptions;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 
-import java.util.List;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.stream.StreamSupport;
@@ -33,22 +29,13 @@ public class MainVerticle extends AbstractVerticle {
 
     PgConnectOptions pgOptions = new PgConnectOptions()
       .setPort(Integer.parseInt(getConfigOrDefault("DB_PORT", "5432")))
-      .setHost(getConfigOrDefault("DB_HOST","db"))
+      .setHost(getConfigOrDefault("DB_HOST", "db"))
       .setDatabase(getConfigOrDefault("DB", "rinhadb"))
       .setUser(getConfigOrDefault("DB_USER", "root"))
-      .setPassword(getConfigOrDefault("DB_PASS","1234"));
+      .setPassword(getConfigOrDefault("DB_PASS", "1234"));
 
     PoolOptions poolOptions = new PoolOptions()
-      .setMaxSize(Integer.parseInt(getConfigOrDefault("POOL_SIZE","25")));
-
-  Redis redisClient = Redis.createClient(
-      vertx,
-      new RedisOptions()
-        .setConnectionString("redis://redis:6379")
-        .setMaxPoolSize(20)
-        .setMaxWaitingHandlers(200));
-
-    RedisAPI redis = RedisAPI.api(redisClient);
+      .setMaxSize(Integer.parseInt(getConfigOrDefault("POOL_SIZE", "25")));
 
     Pool selectDb = PgPool.pool(vertx, pgOptions, poolOptions);
 
@@ -62,16 +49,9 @@ public class MainVerticle extends AbstractVerticle {
         return Future.succeededFuture();
       }
 
-      return redis.get(id).compose(valueInCache -> {
-
-        if (valueInCache != null) {
-          JsonObject value = new JsonObject(valueInCache.toBuffer());
-          return Future.succeededFuture(value);
-        }
-
-        return selectDb.preparedQuery("SELECT id, apelido, nome, nascimento, stack FROM pessoa WHERE id = $1")
-          .execute(Tuple.of(id))
-          .map(query -> {
+      return selectDb.preparedQuery("SELECT id, apelido, nome, nascimento, stack FROM pessoa WHERE id = $1")
+        .execute(Tuple.of(id))
+        .map(query -> {
 
           if (!query.iterator().hasNext()) {
             HttpServerResponse response = ctx.response();
@@ -82,8 +62,7 @@ public class MainVerticle extends AbstractVerticle {
 
           Row personRow = query.iterator().next();
           return buildPersonResponse(personRow);
-        }).onSuccess(jsonPerson -> redis.mset(List.of(id, jsonPerson.encode())));
-      });
+        });
     });
 
     router.get("/pessoas")
@@ -96,29 +75,19 @@ public class MainVerticle extends AbstractVerticle {
           return Future.succeededFuture();
         }
 
-        return redis.get(t).compose(valueInCache -> {
-          if (valueInCache != null) {
-            JsonArray value = new JsonArray(valueInCache.toBuffer());
-            return Future.succeededFuture(value);
-          }
+        return selectDb.preparedQuery("SELECT id, apelido, nome, nascimento, stack FROM pessoa WHERE BUSCA_TRGM LIKE $1 LIMIT 50")
+          .execute(Tuple.of("%" + t + "%"))
+          .map(query -> {
 
-          return selectDb.preparedQuery("SELECT id, apelido, nome, nascimento, stack FROM pessoa WHERE BUSCA_TRGM LIKE $1 LIMIT 50")
-            .execute(Tuple.of("%"+t+"%"))
-            .map(query -> {
+            if (!query.iterator().hasNext()) {
+              return new JsonArray();
+            }
 
-              if (!query.iterator().hasNext()) {
-                return new JsonArray();
-              }
-
-              JsonArray personArray = new JsonArray(StreamSupport.stream(
-                Spliterators.spliteratorUnknownSize(query.iterator(), Spliterator.ORDERED),
-                false
-              ).map(MainVerticle::buildPersonResponse).toList());
-
-              return personArray;
-            }).onSuccess(personArray ->  redis.mset(List.of(t,personArray.encode())));
-
-        });
+            return new JsonArray(StreamSupport.stream(
+              Spliterators.spliteratorUnknownSize(query.iterator(), Spliterator.ORDERED),
+              false
+            ).map(MainVerticle::buildPersonResponse).toList());
+          });
       });
 
     router.get("/contagem-pessoas")
@@ -138,11 +107,8 @@ public class MainVerticle extends AbstractVerticle {
       }
 
       String id = person.getId();
-      jsonPerson.put("id",id);
-
       selectDb.preparedQuery("INSERT INTO pessoa (id, apelido, nome, nascimento, stack) VALUES ($1, $2, $3, $4, $5)")
-        .execute(Tuple.of(id,person.apelido,person.nome,person.nascimento,person.getStackInString()));
-      //redis.mset(List.of(id, jsonPerson.encode()));
+        .execute(Tuple.of(id, person.apelido, person.nome, person.nascimento, person.getStackInString()));
 
       HttpServerResponse response = ctx.response();
       response.setStatusCode(201);
@@ -153,13 +119,13 @@ public class MainVerticle extends AbstractVerticle {
     var server = vertx.createHttpServer();
     server.requestHandler(router)
       .listen(8080, http -> {
-      if (http.succeeded()) {
-        startPromise.complete();
-        System.out.println("HTTP server started on port 8080");
-      } else {
-        startPromise.fail(http.cause());
-      }
-    });
+        if (http.succeeded()) {
+          startPromise.complete();
+          System.out.println("HTTP server started on port 8080");
+        } else {
+          startPromise.fail(http.cause());
+        }
+      });
   }
 
   private static String getConfigOrDefault(String config, String defaultValue) {
@@ -170,7 +136,7 @@ public class MainVerticle extends AbstractVerticle {
   public static JsonObject buildPersonResponse(Row personRow) {
 
     return buildPersonResponse(personRow.getString("id"), personRow.getString("apelido"),
-      personRow.getString("nome"),personRow.getString("nascimento"), personRow.getString("stack"));
+      personRow.getString("nome"), personRow.getString("nascimento"), personRow.getString("stack"));
   }
 
   public static JsonObject buildPersonResponse(String id, String apelido, String name, String nascimento, String stacks) {
@@ -202,6 +168,7 @@ public class MainVerticle extends AbstractVerticle {
     person.nascimento = payload.getString("nascimento");
 
     try {
+      // TODO: use VERT.X schema validation for better serialization/decoding handling
       JsonArray stack = payload.getJsonArray("stack");
       person.setStack(stack);
     } catch (Exception e) {
@@ -212,6 +179,8 @@ public class MainVerticle extends AbstractVerticle {
 }
 
 /*
+  //Model
+
   POST /pessoas – para criar um recurso pessoa.
   GET /pessoas/[:id] – para consultar um recurso criado com a requisição anterior.
   GET /pessoas?t=[:termo da busca] – para fazer uma busca por pessoas.

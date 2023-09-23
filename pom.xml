@@ -7,7 +7,7 @@
   <groupId>luiz.vellozo</groupId>
   <artifactId>rinha-vertx</artifactId>
   <version>1</version>
-  <name>rinha-backend</name>
+  <name>rinha-vertx</name>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

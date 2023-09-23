@@ -5,13 +5,12 @@ services:
     hostname: api01
     depends_on:
       - db
-      - redis
     expose:
       - "8080:8080"
     deploy:
       resources:
         limits:
-          cpus: '0.2'
+          cpus: '0.3'
           memory: '0.9GB'
     environment:
       DB_USER: root
@@ -21,18 +20,18 @@ services:
       DB_PORT: 5432
       POOL_SIZE: 25
 
+
   api02:
     image: luizvellozo/rinha-vertx:latest
     hostname: api02
     depends_on:
       - db
-      - redis
     expose:
       - "8080:8080"
     deploy:
       resources:
         limits:
-          cpus: '0.2'
+          cpus: '0.3'
           memory: '0.9GB'
     environment:
       DB_USER: root
@@ -55,7 +54,7 @@ services:
       resources:
         limits:
           cpus: '0.2'
-          memory: '0.5GB'
+          memory: '0.6GB'
 
   db: # Banco de dados
     image: postgres
@@ -73,19 +72,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.8'
+          cpus: '1.0'
           memory: '1.0GB'
-  redis:
-    image: redis
-    hostname: redis
-    ports:
-      - "6379:6379"
-    command: redis-server --save "" --appendonly no --maxclients 20000
-    deploy:
-      resources:
-        limits:
-          cpus: '0.2'
-          memory: '0.3GB'
 
 networks:
   default:
