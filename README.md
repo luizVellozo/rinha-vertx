@@ -1,9 +1,6 @@
 # rinha-vertx
 Simple test to learn VERT.X with Java and see how far I can go in the [rinha-de-backend-2023-q3](https://github.com/zanfranceschi/rinha-de-backend-2023-q3)
 
-= Rinha-backend
-
-image:https://img.shields.io/badge/vert.x-4.4.5-purple.svg[link="https://vertx.io"]
 
 This application was generated using http://start.vertx.io
 
