@@ -122,6 +122,8 @@ public class MainVerticle extends AbstractVerticle {
         if (http.succeeded()) {
           startPromise.complete();
           System.out.println("HTTP server started on port 8080");
+          System.out.println("POOL_SIZE: " +getConfigOrDefault("POOL_SIZE", "25"));
+          System.out.println("JAVA_OPTS: " +System.getenv("JAVA_OPTS"));
         } else {
           startPromise.fail(http.cause());
         }
@@ -171,9 +173,7 @@ public class MainVerticle extends AbstractVerticle {
       // TODO: use VERT.X schema validation for better serialization/decoding handling
       JsonArray stack = payload.getJsonArray("stack");
       person.setStack(stack);
-    } catch (Exception e) {
-      System.out.println(payload.getString("stack"));
-    }
+    } catch (Exception ignored) {}
     return person;
   }
 }
@@ -192,4 +192,4 @@ public class MainVerticle extends AbstractVerticle {
     "nascimento" : "2000-10-01",
     "stack" : ["C#", "Node", "Oracle"]
   }
-  */
+ */

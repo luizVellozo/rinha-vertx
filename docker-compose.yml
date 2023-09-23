@@ -1,4 +1,4 @@
-version: '3.8'
+version: '3.5'
 services:
   api01:
     image: luizvellozo/rinha-vertx:latest
@@ -10,7 +10,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.3'
+          cpus: '0.4'
           memory: '0.9GB'
     environment:
       DB_USER: root
@@ -18,8 +18,8 @@ services:
       DB: rinhadb
       DB_HOST: db
       DB_PORT: 5432
-      POOL_SIZE: 25
-
+      POOL_SIZE: 20
+      JAVA_OPTS: "-verbose:gc -Xmx768M -Xms768M -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:+ExitOnOutOfMemoryError"
 
   api02:
     image: luizvellozo/rinha-vertx:latest
@@ -31,7 +31,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.3'
+          cpus: '0.4'
           memory: '0.9GB'
     environment:
       DB_USER: root
@@ -39,7 +39,8 @@ services:
       DB: rinhadb
       DB_HOST: db
       DB_PORT: 5432
-      POOL_SIZE: 25
+      POOL_SIZE: 20
+      JAVA_OPTS: "-verbose:gc -Xmx768M -Xms768M -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:+ExitOnOutOfMemoryError"
 
   nginx: # Load Balancer
     image: nginx:latest
@@ -53,8 +54,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.2'
-          memory: '0.6GB'
+          cpus: '0.3'
+          memory: '0.5GB'
 
   db: # Banco de dados
     image: postgres
@@ -72,7 +73,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: '1.4'
           memory: '1.0GB'
 
 networks:
