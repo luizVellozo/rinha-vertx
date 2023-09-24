@@ -3,6 +3,7 @@ package rinha.api;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
+import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -10,16 +11,22 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
+import io.vertx.redis.client.Redis;
+import io.vertx.redis.client.RedisAPI;
+import io.vertx.redis.client.RedisOptions;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 
+import java.util.List;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.stream.StreamSupport;
 
 public class MainVerticle extends AbstractVerticle {
+
+
 
   @Override
   public void start(Promise<Void> startPromise) throws Exception {
@@ -37,7 +44,16 @@ public class MainVerticle extends AbstractVerticle {
     PoolOptions poolOptions = new PoolOptions()
       .setMaxSize(Integer.parseInt(getConfigOrDefault("POOL_SIZE", "25")));
 
-    Pool selectDb = PgPool.pool(vertx, pgOptions, poolOptions);
+    Redis redisClient = Redis.createClient(
+      vertx,
+      new RedisOptions()
+        .setConnectionString("redis://redis:6379")
+        .setMaxPoolSize(200)
+        .setMaxWaitingHandlers(200));
+
+    RedisAPI redis = RedisAPI.api(redisClient);
+
+    Pool db = PgPool.pool(vertx, pgOptions, poolOptions);
 
     router.get("/pessoas/:id").respond(ctx -> {
       String id = ctx.pathParam("id");
@@ -49,21 +65,32 @@ public class MainVerticle extends AbstractVerticle {
         return Future.succeededFuture();
       }
 
-      return selectDb.preparedQuery("SELECT id, apelido, nome, nascimento, stack FROM pessoa WHERE id = $1")
-        .execute(Tuple.of(id))
-        .map(query -> {
+      return redis.get(id).compose(valueInCache -> {
 
-          if (!query.iterator().hasNext()) {
-            HttpServerResponse response = ctx.response();
-            response.setStatusCode(404);
-            response.end();
-            return null;
-          }
+        if (valueInCache != null) {
+          JsonObject value = new JsonObject(valueInCache.toBuffer());
+          return Future.succeededFuture(value);
+        }
 
-          Row personRow = query.iterator().next();
-          return buildPersonResponse(personRow);
-        });
-    });
+        return db.preparedQuery("SELECT id, apelido, nome, nascimento, stack FROM pessoa WHERE id = $1")
+          .execute(Tuple.of(id))
+          .map(query -> {
+
+            if (!query.iterator().hasNext()) {
+              HttpServerResponse response = ctx.response();
+              response.setStatusCode(404);
+              response.end();
+              return null;
+            }
+
+            Row personRow = query.iterator().next();
+            return buildPersonResponse(personRow);
+          }).onSuccess(jsonPerson -> {
+            if (jsonPerson != null) redis.mset(List.of(id, jsonPerson.encode()));
+          })
+          .onFailure(throwable -> System.out.println("GET FAIL: "+throwable.getMessage()));
+      });
+    }).failureHandler(throwable -> System.out.println("GET FAIL"));
 
     router.get("/pessoas")
       .respond(ctx -> {
@@ -74,24 +101,31 @@ public class MainVerticle extends AbstractVerticle {
           response.end();
           return Future.succeededFuture();
         }
+        return redis.get("t:"+t.toLowerCase()).compose(valueInCache -> {
+          if (valueInCache != null) {
+            JsonArray value = new JsonArray(valueInCache.toBuffer());
+            return Future.succeededFuture(value);
+          }
 
-        return selectDb.preparedQuery("SELECT id, apelido, nome, nascimento, stack FROM pessoa WHERE BUSCA_TRGM LIKE $1 LIMIT 50")
-          .execute(Tuple.of("%" + t + "%"))
-          .map(query -> {
+          return db.preparedQuery("SELECT id, apelido, nome, nascimento, stack FROM pessoa WHERE BUSCA_TRGM LIKE $1 LIMIT 50")
+            .execute(Tuple.of("%" + t.toLowerCase() + "%"))
+            .map(query -> {
 
-            if (!query.iterator().hasNext()) {
-              return new JsonArray();
-            }
+              if (!query.iterator().hasNext()) {
+                return new JsonArray();
+              }
 
-            return new JsonArray(StreamSupport.stream(
-              Spliterators.spliteratorUnknownSize(query.iterator(), Spliterator.ORDERED),
-              false
-            ).map(MainVerticle::buildPersonResponse).toList());
-          });
-      });
+              return new JsonArray(StreamSupport.stream(
+                Spliterators.spliteratorUnknownSize(query.iterator(), Spliterator.ORDERED),
+                false
+              ).map(MainVerticle::buildPersonResponse).toList());
+            }).onSuccess(personArray -> redis.mset(List.of("t:"+t.toLowerCase(), personArray.encode())));
+
+        });
+      }).failureHandler(throwable -> System.out.println("GET T FAIL"));
 
     router.get("/contagem-pessoas")
-      .respond(ctx -> selectDb.preparedQuery("SELECT COUNT(1) FROM pessoa")
+      .respond(ctx -> db.preparedQuery("SELECT COUNT(1) FROM pessoa")
         .execute()
         .map(query -> query.iterator().next().getLong(0)));
 
@@ -99,31 +133,63 @@ public class MainVerticle extends AbstractVerticle {
       JsonObject jsonPerson = ctx.body().asJsonObject();
 
       Person person = build(jsonPerson);
-      if (!person.isValid()) {
+
+      redis.get(person.apelido).onComplete(valueInCache -> {
+
+        if (valueInCache != null) {
+          var value = valueInCache.result();
+          if (value != null) {
+            HttpServerResponse response = ctx.response();
+            response.setStatusCode(201);
+            response.putHeader("Location", "/pessoas/"+ value);
+            response.end();
+            return;
+          }
+        }
+
+        if (!person.isValid()) {
+          HttpServerResponse response = ctx.response();
+          response.setStatusCode(400);
+          response.end();
+          return;
+        }
+
+        final String id = person.getId();
+        jsonPerson.put("id", id);
+        final String json = jsonPerson.encode();
+
+        redis.mset(List.of(id, json, person.apelido, id));
+        db.preparedQuery("INSERT INTO pessoa (id, apelido, nome, nascimento, stack) VALUES ($1, $2, $3, $4, $5)")
+          .execute(Tuple.of(id, person.apelido, person.nome, person.nascimento, person.getStackInString()))
+          .onFailure(throwable -> System.out.println("INSERT FAIL: "+throwable.getMessage()));
+
         HttpServerResponse response = ctx.response();
-        response.setStatusCode(400);
+        response.setStatusCode(201);
+        response.putHeader("Location", "/pessoas/" + id);
         response.end();
-        return;
-      }
+      });
+    }).failureHandler(throwable -> System.out.println("POST FAIL"));
 
-      String id = person.getId();
-      selectDb.preparedQuery("INSERT INTO pessoa (id, apelido, nome, nascimento, stack) VALUES ($1, $2, $3, $4, $5)")
-        .execute(Tuple.of(id, person.apelido, person.nome, person.nascimento, person.getStackInString()));
 
-      HttpServerResponse response = ctx.response();
-      response.setStatusCode(201);
-      response.putHeader("Location", "/pessoas/" + id);
-      response.end();
-    });
+    var options = new HttpServerOptions();
+    options
+      .setPort(8080)
+      .setCompressionSupported(true)
+      .setHandle100ContinueAutomatically(true)
+      .setTcpFastOpen(true)
+      .setTcpNoDelay(true)
+      .setTcpQuickAck(true);
 
-    var server = vertx.createHttpServer();
+    var server = vertx.createHttpServer(options);
     server.requestHandler(router)
-      .listen(8080, http -> {
+      .exceptionHandler(throwable -> System.out.println("SERVER FAIL: "+throwable.getMessage()))
+      .listen( http -> {
         if (http.succeeded()) {
           startPromise.complete();
           System.out.println("HTTP server started on port 8080");
-          System.out.println("POOL_SIZE: " +getConfigOrDefault("POOL_SIZE", "25"));
-          System.out.println("JAVA_OPTS: " +System.getenv("JAVA_OPTS"));
+
+          System.out.println("POOL_SIZE: " + getConfigOrDefault("POOL_SIZE", "25"));
+          System.out.println("JAVA_OPTS: " + System.getenv("JAVA_OPTS"));
         } else {
           startPromise.fail(http.cause());
         }
@@ -148,7 +214,7 @@ public class MainVerticle extends AbstractVerticle {
       .put("apelido", apelido)
       .put("nome", name)
       .put("nascimento", nascimento)
-      .put("stack", null);
+      .putNull("stack");
 
     if (stacks != null && !stacks.isBlank()) {
       json.put("stack", JsonArray.of(stacks.split(",")));

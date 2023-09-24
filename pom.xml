@@ -21,7 +21,7 @@
     <junit-jupiter.version>5.9.1</junit-jupiter.version>
 
     <main.verticle>rinha.api.MainVerticle</main.verticle>
-    <launcher.class>io.vertx.core.Launcher</launcher.class>
+    <launcher.class>rinha.api.Runner</launcher.class>
   </properties>
 
   <dependencyManagement>
@@ -41,6 +41,14 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-web</artifactId>
     </dependency>
+
+    <!-- Netty -->
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-epoll</artifactId>
+      <classifier>linux-x86_64</classifier>
+    </dependency>
+
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-pg-client</artifactId>
