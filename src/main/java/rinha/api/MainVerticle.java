@@ -43,6 +43,7 @@ public class MainVerticle extends AbstractVerticle {
 
     PoolOptions poolOptions = new PoolOptions()
       .setMaxSize(Integer.parseInt(getConfigOrDefault("POOL_SIZE", "25")));
+    Pool db = PgPool.pool(vertx, pgOptions, poolOptions);
 
     Redis redisClient = Redis.createClient(
       vertx,
@@ -52,8 +53,6 @@ public class MainVerticle extends AbstractVerticle {
         .setMaxWaitingHandlers(200));
 
     RedisAPI redis = RedisAPI.api(redisClient);
-
-    Pool db = PgPool.pool(vertx, pgOptions, poolOptions);
 
     router.get("/pessoas/:id").respond(ctx -> {
       String id = ctx.pathParam("id");
@@ -158,10 +157,10 @@ public class MainVerticle extends AbstractVerticle {
         jsonPerson.put("id", id);
         final String json = jsonPerson.encode();
 
-        redis.mset(List.of(id, json, person.apelido, id));
         db.preparedQuery("INSERT INTO pessoa (id, apelido, nome, nascimento, stack) VALUES ($1, $2, $3, $4, $5)")
           .execute(Tuple.of(id, person.apelido, person.nome, person.nascimento, person.getStackInString()))
           .onFailure(throwable -> System.out.println("INSERT FAIL: "+throwable.getMessage()));
+        redis.mset(List.of(id, json, person.apelido, id));
 
         HttpServerResponse response = ctx.response();
         response.setStatusCode(201);
@@ -173,7 +172,7 @@ public class MainVerticle extends AbstractVerticle {
 
     var options = new HttpServerOptions();
     options
-      .setPort(8080)
+      .setPort(80)
       .setCompressionSupported(true)
       .setHandle100ContinueAutomatically(true)
       .setTcpFastOpen(true)
@@ -186,7 +185,7 @@ public class MainVerticle extends AbstractVerticle {
       .listen( http -> {
         if (http.succeeded()) {
           startPromise.complete();
-          System.out.println("HTTP server started on port 8080");
+          System.out.println("HTTP server started on port 80");
 
           System.out.println("POOL_SIZE: " + getConfigOrDefault("POOL_SIZE", "25"));
           System.out.println("JAVA_OPTS: " + System.getenv("JAVA_OPTS"));

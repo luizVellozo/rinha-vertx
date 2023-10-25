@@ -1,5 +1,5 @@
-FROM azul/zulu-openjdk-alpine:17-jre-latest
+FROM azul/zulu-openjdk-alpine:17-latest
 
 COPY target/rinha-vertx-fat.jar .
 
-CMD ["java", "-jar", "rinha-vertx-fat.jar", "$JAVA_OPTS"]
+ENTRYPOINT java ${JAVA_OPTS} -jar rinha-vertx-fat.jar

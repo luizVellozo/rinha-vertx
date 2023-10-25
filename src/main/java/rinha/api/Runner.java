@@ -10,12 +10,12 @@ public class Runner {
     VertxOptions vertxOptions = new VertxOptions();
     vertxOptions.setPreferNativeTransport(true);
     // TODO: check if it really improves
-    vertxOptions.setWorkerPoolSize(60);
+    //vertxOptions.setWorkerPoolSize(60);
 
     final Vertx vertx = Vertx.vertx(vertxOptions);
 
     var options = new DeploymentOptions();
-    options.setInstances(2);
+    options.setInstances(1);
 
     System.out.println("Deploying verticles");
 

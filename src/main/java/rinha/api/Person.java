@@ -28,7 +28,7 @@ public class Person {
     }
     if (stack != null) {
       for (String value : stack) {
-        if (value.isBlank() && value.length() > 32)
+        if (value.isBlank() || value.length() > 32)
           return false;
       }
     }

@@ -7,13 +7,11 @@ services:
     depends_on:
       - db
       - redis
-    expose:
-      - "8080:8080"
     deploy:
       resources:
         limits:
-          cpus: '0.4'
-          memory: '0.9GB'
+          cpus: '0.2'
+          memory: '0.75GB'
     environment:
       DB_USER: root
       DB_PASS: 1234
@@ -21,8 +19,7 @@ services:
       DB_HOST: db
       DB_PORT: 5432
       POOL_SIZE: 15
-      JAVA_OPTS: "-verbose:gc -Xmx768M -Xms768M -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:+ExitOnOutOfMemoryError"
-
+      JAVA_OPTS: -XX:InitialRAMPercentage=50 -XX:MaxRAMPercentage=80 -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:+ExitOnOutOfMemoryError
   api02:
     image: luizvellozo/rinha-vertx:latest
     build: .
@@ -30,13 +27,11 @@ services:
     depends_on:
       - db
       - redis
-    expose:
-      - "8080:8080"
     deploy:
       resources:
         limits:
-          cpus: '0.4'
-          memory: '0.9GB'
+          cpus: '0.2'
+          memory: '0.75GB'
     environment:
       DB_USER: root
       DB_PASS: 1234
@@ -44,7 +39,7 @@ services:
       DB_HOST: db
       DB_PORT: 5432
       POOL_SIZE: 15
-      JAVA_OPTS: "-verbose:gc -Xmx768M -Xms768M -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:+ExitOnOutOfMemoryError"
+      JAVA_OPTS: -XX:InitialRAMPercentage=50 -XX:MaxRAMPercentage=80 -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:+ExitOnOutOfMemoryError
 
   nginx: # Load Balancer
     image: nginx:latest
@@ -58,8 +53,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.3'
-          memory: '0.5GB'
+          cpus: '0.2'
+          memory: '0.2GB'
 
   db: # Banco de dados
     image: postgres
@@ -77,8 +72,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.4'
-          memory: '1.0GB'
+          cpus: '0.8'
+          memory: '1GB'
   redis:
     image: redis
     hostname: redis
@@ -88,9 +83,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.3'
-          memory: '0.4GB'
-
+          cpus: '0.2'
+          memory: '0.2GB'
 
 networks:
   default:
